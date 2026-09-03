@@ -1,0 +1,8 @@
+SELECT 'CREATE DATABASE youtube'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'youtube')\gexec
+
+\connect youtube
+
+CREATE SCHEMA IF NOT EXISTS raw;
+CREATE SCHEMA IF NOT EXISTS staging;
+CREATE SCHEMA IF NOT EXISTS semantic;
