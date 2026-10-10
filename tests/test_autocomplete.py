@@ -34,6 +34,18 @@ class ParseAutocompleteResponseTest(unittest.TestCase):
             "python dersleri",
         )
         self.assertEqual(first_suggestion["subtype_codes"], [512, 433])
+        fourth_suggestion = result["suggestions"][3]
+        fifth_suggestion = result["suggestions"][4]
+
+        self.assertEqual(
+            fourth_suggestion["suggestion_text"],
+            "python nasıl indirilir",
+        )
+
+        self.assertEqual(
+            fifth_suggestion["suggestion_text"],
+            "python'a giriş",
+        )
 
     def test_rejects_unexpected_source_contract(self) -> None:
         with self.assertRaises(SourceContractError):

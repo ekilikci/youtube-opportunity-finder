@@ -1,12 +1,21 @@
 import argparse
-import json
-import re
 import hashlib
+from html import parser
+import json
+import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from youtube_opportunity.autocomplete import (
+    parse_autocomplete_response,
+)
+from youtube_opportunity.storage import (
+    insert_raw_autocomplete_request,
+    upsert_autocomplete_suggestions,
+)
 
 BASE_URL = "https://suggestqueries.google.com/complete/search"
 
@@ -17,6 +26,11 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--query", required=True)
     parser.add_argument("--language", default="tr")
     parser.add_argument("--country", default="TR")
+    parser.add_argument(
+        "--save-to-database",
+        action="store_true",
+        help="Save the raw response to PostgreSQL.",
+    )
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -88,15 +102,55 @@ def main() -> None:
         "content_type": content_type,
         "charset": charset,
         "response_headers": response_headers,
-        "raw_body_size_bytes": len(raw_body),
-        "response_sha256": response_sha256,
     }
 
     metadata_path.write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    request_id = None
+    suggestion_count = None
 
+    if args.save_to_database:
+        database_url = os.environ.get("YOUTUBE_DATABASE_URL")
+
+        if not database_url:
+            raise RuntimeError(
+                "YOUTUBE_DATABASE_URL must be set "
+                "when --save-to-database is used."
+            )
+
+        request_id = insert_raw_autocomplete_request(
+            database_url=database_url,
+            requested_at=requested_at,
+            requested_query=args.query,
+            requested_language=args.language,
+            requested_country=args.country,
+            endpoint_url=BASE_URL,
+            request_parameters=parameters,
+            http_status_code=status_code,
+            response_content_type=content_type,
+            response_charset=charset,
+            response_headers=response_headers,
+            response_body=raw_body,
+        )
+
+        normalized_response = parse_autocomplete_response(
+            raw_body=raw_body,
+            charset=charset,
+        )
+
+        suggestion_count = upsert_autocomplete_suggestions(
+            database_url=database_url,
+            request_id=request_id,
+            suggestions=normalized_response["suggestions"],
+        )
+
+    if request_id is not None:
+        print(f"Saved to database with request_id: {request_id}")
+    
+    if suggestion_count is not None:
+        print(f"Saved staging suggestions: {suggestion_count}")
     print(f"HTTP status: {status_code}")
     print(f"Content-Type: {content_type}")
     print(f"Charset: {charset}")
