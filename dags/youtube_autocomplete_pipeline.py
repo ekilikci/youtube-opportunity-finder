@@ -14,6 +14,48 @@ from youtube_opportunity.storage import (
     upsert_autocomplete_suggestions,
 )
 
+SEEDS = [
+    {
+        "query": "python nasıl öğrenilir",
+        "language": "tr",
+        "country": "TR",
+    },
+    {
+        "query": "python nedir",
+        "language": "tr",
+        "country": "TR",
+    },
+    {
+        "query": "veri analizi nasıl yapılır",
+        "language": "tr",
+        "country": "TR",
+    },
+    {
+        "query": "veri analizi nedir",
+        "language": "tr",
+        "country": "TR",
+    },
+    {
+        "query": "yapay zeka nasıl öğrenilir",
+        "language": "tr",
+        "country": "TR",
+    },
+    {
+        "query": "yapay zeka nedir",
+        "language": "tr",
+        "country": "TR",
+    },
+    {
+        "query": "excel nasıl kullanılır",
+        "language": "tr",
+        "country": "TR",
+    },
+    {
+        "query": "excel formülleri",
+        "language": "tr",
+        "country": "TR",
+    },
+]
 
 def get_database_url() -> str:
     database_url = os.environ.get("YOUTUBE_DATABASE_URL")
@@ -26,9 +68,10 @@ def get_database_url() -> str:
 
 @dag(
     dag_id="youtube_autocomplete_pipeline",
-    start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    start_date=datetime(2026, 10, 10, tzinfo=timezone.utc),
     schedule=None,
     catchup=False,
+    max_active_tasks=2,
     tags=["youtube", "autocomplete", "raw", "staging"],
 )
 def youtube_autocomplete_pipeline():
@@ -37,22 +80,25 @@ def youtube_autocomplete_pipeline():
         retries=2,
         retry_delay=timedelta(seconds=30),
     )
-    def extract_and_load_raw() -> str:
+    def extract_and_load_raw(seed: dict[str, str]) -> str:
         database_url = get_database_url()
         context = get_current_context()
+        query=seed["query"]
+        language=seed["language"]
+        country=seed["country"]
 
         response = fetch_autocomplete_response(
-            query="python veri analizi",
-            language="tr",
-            country="TR",
+            query=query,
+            language=language,
+            country=country
         )
 
         request_id = insert_raw_autocomplete_request(
             database_url=database_url,
             requested_at=response.requested_at,
-            requested_query="python veri analizi",
-            requested_language="tr",
-            requested_country="TR",
+            requested_query=query,
+            requested_language=language,
+            requested_country=country,
             endpoint_url=response.endpoint_url,
             request_parameters=response.request_parameters,
             http_status_code=response.status_code,
@@ -95,8 +141,8 @@ def youtube_autocomplete_pipeline():
 
         return suggestion_count
 
-    request_id = extract_and_load_raw()
-    parse_and_load_staging(request_id)
+    request_ids = extract_and_load_raw.expand(seed=SEEDS)
+    parse_and_load_staging.expand(request_id_value=request_ids)
 
 
 youtube_autocomplete_pipeline()
