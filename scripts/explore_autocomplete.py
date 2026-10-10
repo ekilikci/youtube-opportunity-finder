@@ -1,23 +1,18 @@
 import argparse
 import hashlib
-from html import parser
 import json
 import os
 import re
-from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
 from youtube_opportunity.autocomplete import (
+    fetch_autocomplete_response,
     parse_autocomplete_response,
 )
 from youtube_opportunity.storage import (
     insert_raw_autocomplete_request,
     upsert_autocomplete_suggestions,
 )
-
-BASE_URL = "https://suggestqueries.google.com/complete/search"
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -46,31 +41,20 @@ def safe_filename(value: str) -> str:
 
 def main() -> None:
     args = parse_arguments()
-    parameters = {
-        "client": "firefox",
-        "ds": "yt",
-        "hl": args.language,
-        "gl": args.country,
-        "q": args.query,
-    }
-
-    request_url = f"{BASE_URL}?{urlencode(parameters)}"
-    request = Request(
-        request_url,
-        headers={
-            "User-Agent": "youtube-opportunity-finder/0.1",
-        },
+    source_response = fetch_autocomplete_response(
+        query=args.query,
+        language=args.language,
+        country=args.country,
     )
 
-    requested_at = datetime.now(timezone.utc)
-
-    with urlopen(request, timeout=30) as response:
-        raw_body = response.read()
-        response_sha256 = hashlib.sha256(raw_body).hexdigest()
-        status_code = response.status
-        response_headers = dict(response.headers.items())
-        content_type = response.headers.get_content_type()
-        charset = response.headers.get_content_charset() or "utf-8"
+    requested_at = source_response.requested_at
+    parameters = source_response.request_parameters
+    raw_body = source_response.body
+    status_code = source_response.status_code
+    response_headers = source_response.headers
+    content_type = source_response.content_type
+    charset = source_response.charset
+    response_sha256 = hashlib.sha256(raw_body).hexdigest()
 
     decoded_body = raw_body.decode(charset)
     parsed_body = json.loads(decoded_body)
@@ -96,7 +80,7 @@ def main() -> None:
 
     metadata = {
         "requested_at": requested_at.isoformat(),
-        "request_url": request_url,
+        "endpoint_url": source_response.endpoint_url,
         "request_parameters": parameters,
         "http_status_code": status_code,
         "content_type": content_type,
@@ -126,7 +110,7 @@ def main() -> None:
             requested_query=args.query,
             requested_language=args.language,
             requested_country=args.country,
-            endpoint_url=BASE_URL,
+            endpoint_url=source_response.endpoint_url,
             request_parameters=parameters,
             http_status_code=status_code,
             response_content_type=content_type,

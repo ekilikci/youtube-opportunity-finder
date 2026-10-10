@@ -1,6 +1,68 @@
 import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
+
+BASE_URL = "https://suggestqueries.google.com/complete/search"
+
+
+@dataclass(frozen=True)
+class AutocompleteHttpResponse:
+    requested_at: datetime
+    endpoint_url: str
+    request_parameters: dict[str, str]
+    status_code: int
+    content_type: str
+    charset: str
+    headers: dict[str, str]
+    body: bytes
+
+
+def fetch_autocomplete_response(
+    *,
+    query: str,
+    language: str = "tr",
+    country: str = "TR",
+    timeout_seconds: int = 30,
+) -> AutocompleteHttpResponse:
+    parameters = {
+        "client": "firefox",
+        "ds": "yt",
+        "hl": language,
+        "gl": country,
+        "q": query,
+    }
+
+    request_url = f"{BASE_URL}?{urlencode(parameters)}"
+
+    request = Request(
+        request_url,
+        headers={
+            "User-Agent": "youtube-opportunity-finder/0.1",
+        },
+    )
+
+    requested_at = datetime.now(timezone.utc)
+
+    with urlopen(request, timeout=timeout_seconds) as response:
+        body = response.read()
+
+        return AutocompleteHttpResponse(
+            requested_at=requested_at,
+            endpoint_url=BASE_URL,
+            request_parameters=parameters,
+            status_code=response.status,
+            content_type=response.headers.get_content_type(),
+            charset=(
+                response.headers.get_content_charset()
+                or "utf-8"
+            ),
+            headers=dict(response.headers.items()),
+            body=body,
+        )
 
 class SourceContractError(ValueError):
     """Raised when autocomplete returns an unexpected structure."""

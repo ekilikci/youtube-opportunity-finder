@@ -1,5 +1,8 @@
 x-airflow-common: &airflow-common
-  image: apache/airflow:3.3.0-python3.11
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: youtube-opportunity-airflow:0.1.0
   env_file: .env
   environment:
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -8,9 +11,12 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET}
+    YOUTUBE_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/youtube
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/config/simple_auth_manager_passwords.json.generated
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
+    - airflow_config:/opt/airflow/config
   depends_on:
     postgres:
       condition: service_healthy
@@ -62,3 +68,4 @@ services:
 
 volumes:
   postgres_data:
+  airflow_config:

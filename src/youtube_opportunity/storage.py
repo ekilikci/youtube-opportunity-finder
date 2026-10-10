@@ -126,3 +126,37 @@ def upsert_autocomplete_suggestions(
             )
 
     return len(rows)
+
+def get_raw_autocomplete_response(
+    database_url: str,
+    *,
+    request_id: UUID,
+) -> tuple[bytes, str]:
+    with psycopg.connect(database_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    response_body,
+                    response_charset
+                FROM raw.youtube_autocomplete_request
+                WHERE request_id = %s
+                """,
+                (request_id,),
+            )
+
+            row = cursor.fetchone()
+
+    if row is None:
+        raise LookupError(
+            f"Raw autocomplete request not found: {request_id}"
+        )
+
+    response_body, response_charset = row
+
+    if response_body is None or response_charset is None:
+        raise ValueError(
+            f"Raw response is incomplete: {request_id}"
+        )
+
+    return bytes(response_body), response_charset
